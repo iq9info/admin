@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iQ9 Enterprise Admin Portal</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS CDN for CSV and Excel (.xlsx, .xls) Parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans flex flex-col">
+
+  <!-- Alert Banner -->
+  <div id="alertBanner" class="hidden fixed top-4 right-4 z-50 p-4 rounded-xl text-sm font-medium shadow-2xl max-w-md"></div>
+
+  <!-- Auth Screen Overlay (Visible by Default) -->
+  <div id="authScreen" class="fixed inset-0 bg-slate-950 z-40 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+      <div class="flex items-center space-x-3 mb-6">
+        <span class="text-3xl">🛡️</span>
+        <div>
+          <h2 class="text-xl font-bold text-white">Admin Authentication</h2>
+          <p class="text-xs text-slate-400">Restricted portal for authorized administrators</p>
+        </div>
+      </div>
+
+      <!-- Login Form -->
+      <form id="loginForm" onsubmit="handleEmailLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Admin Email</label>
+          <input type="email" id="authEmail" required placeholder="admin@iq9.com" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-indigo-500 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Password</label>
+          <input type="password" id="authPassword" required placeholder="••••••••" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:border-indigo-500 focus:outline-none" />
+        </div>
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg shadow-indigo-600/20">
+          Sign In with Credentials
+        </button>
+      </form>
+
+      <div class="relative my-6 text-center text-xs text-slate-500">
+        <span class="bg-slate-900 px-2 relative z-10">OR</span>
+        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-800"></div></div>
+      </div>
+
+      <button onclick="handleGoogleLogin()" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-medium py-2.5 rounded-xl text-sm transition flex items-center justify-center space-x-2">
+        <span>Sign In with Google</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Navigation Bar -->
+  <header class="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex items-center space-x-3">
+        <span class="text-2xl">⚡</span>
+        <div>
+          <h1 class="text-lg font-bold text-white tracking-tight">iQ9 Firestore Manager</h1>
+          <p class="text-xs text-slate-400">Multi-Collection Data Engine</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-4">
+        <!-- Collection Selector -->
+        <div class="flex items-center space-x-2">
+          <label class="text-xs font-semibold text-slate-400 uppercase">Target Collection:</label>
+          <select id="collectionSelect" onchange="changeCollection()" class="bg-slate-950 border border-slate-800 text-indigo-400 font-semibold text-sm rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500">
+            <option value="questions">questions</option>
+            <option value="exam">exam</option>
+            <option value="flashcards">flashcards</option>
+            <option value="learn">learn</option>
+            <option value="fliplearn">fliplearn</option>
+          </select>
+        </div>
+
+        <button onclick="handleSignOut()" class="bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-semibold px-3.5 py-2 rounded-xl transition">
+          Sign Out
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Workspace Container -->
+  <main class="max-w-7xl mx-auto p-6 flex-1 w-full">
+
+    <!-- Top Toolbar -->
+    <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+      <input type="text" id="searchInput" onkeyup="filterDocs()" placeholder="Search documents by ID or attributes..."
+             class="bg-slate-900 border border-slate-800 text-white rounded-xl px-4 py-2.5 w-full md:w-96 text-sm focus:outline-none focus:border-indigo-500" />
+
+      <div class="flex items-center space-x-3 w-full md:w-auto justify-end">
+        <button onclick="fetchCurrentCollection()" class="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-sm font-medium px-4 py-2.5 rounded-xl transition">
+          🔄 Refresh
+        </button>
+        <button onclick="openUploadModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-lg shadow-indigo-600/20">
+          📁 Upload CSV / Excel
+        </button>
+        <button onclick="openEditModal(null)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-lg shadow-emerald-600/20">
+          + Add Document
+        </button>
+      </div>
+    </div>
+
+    <!-- Data Table View -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm text-slate-300">
+          <thead class="bg-slate-950 text-xs uppercase text-slate-400 border-b border-slate-800">
+            <tr>
+              <th class="p-4">Document ID</th>
+              <th class="p-4">Attributes Summary</th>
+              <th class="p-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-slate-800/60">
+            <!-- Rendered dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL 1: CSV / Excel Batch Upload Modal -->
+  <div id="uploadModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-xl w-full shadow-2xl">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-bold text-white">Batch Upload / Merge Data</h3>
+        <button onclick="closeUploadModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-400 mb-4">
+        Select a <code class="text-indigo-400">.csv</code>, <code class="text-indigo-400">.xlsx</code>, or <code class="text-indigo-400">.xls</code> file to push into target collection:
+        <span id="targetCollectionBadge" class="font-bold text-emerald-400">questions</span>
+      </p>
+
+      <!-- Options -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 mb-4 flex items-center justify-between">
+        <div>
+          <span class="font-medium text-sm text-white block">Merge Mode (`SetOptions.merge()`)</span>
+          <span class="text-xs text-slate-400">Updates existing fields without clearing unlisted attributes.</span>
+        </div>
+        <input type="checkbox" id="mergeModeToggle" checked class="w-5 h-5 accent-indigo-600 rounded" />
+      </div>
+
+      <!-- File Drop Area -->
+      <div onclick="document.getElementById('fileInput').click()" class="border-2 border-dashed border-slate-800 hover:border-indigo-500 rounded-xl p-8 text-center bg-slate-950/50 mb-6 cursor-pointer transition">
+        <span class="text-4xl block mb-2">📊</span>
+        <span id="fileLabel" class="text-sm font-medium text-slate-300">Click to pick CSV or Excel file</span>
+        <input type="file" id="fileInput" accept=".csv, .xlsx, .xls" class="hidden" onchange="handleFileSelect(event)" />
+      </div>
+
+      <div class="flex justify-end space-x-3">
+        <button onclick="closeUploadModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-sm font-medium">Cancel</button>
+        <button onclick="executeBatchUpload()" id="startUploadBtn" disabled class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white px-6 py-2 rounded-xl text-sm font-semibold transition">
+          Execute Upload
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: Single Document Create / Edit Modal -->
+  <div id="editModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] flex flex-col">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="editModalTitle" class="text-lg font-bold text-white">Create Document</h3>
+        <button onclick="closeEditModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="space-y-4 overflow-y-auto flex-1 pr-2">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Document ID (Leave blank to auto-generate)</label>
+          <input type="text" id="docIdInput" placeholder="e.g. q101" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase mb-1">Document JSON Data</label>
+          <textarea id="jsonEditor" rows="12" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono text-emerald-400 focus:outline-none focus:border-indigo-500" placeholder='{\n  "title": "Example",\n  "active": true\n}'></textarea>
+        </div>
+      </div>
+
+      <div class="flex justify-between items-center pt-4 border-t border-slate-800 mt-4">
+        <label class="flex items-center space-x-2 text-xs text-slate-400">
+          <input type="checkbox" id="singleMergeToggle" checked class="accent-indigo-600 rounded" />
+          <span>Merge with existing document</span>
+        </label>
+        <div class="flex space-x-3">
+          <button onclick="closeEditModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-sm font-medium">Cancel</button>
+          <button onclick="saveSingleDocument()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-xl text-sm font-semibold">Save Document</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase v10 Modular Logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { 
+      getAuth, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { 
+      getFirestore, collection, getDocs, doc, getDoc, setDoc, deleteDoc, writeBatch 
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    // 1. YOUR FIREBASE CONFIGURATION
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let activeCollection = "questions";
+    let loadedDocuments = [];
+    let parsedFileData = null;
+
+    // Authentication Observer & Admin Check
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Verify Admin Role in Firestore (/leaderboard/{uid})
+        try {
+          const userDoc = await getDoc(doc(db, "leaderboard", user.uid));
+          const userData = userDoc.data();
+
+          if (userData && userData.role === "Admin") {
+            document.getElementById("authScreen").classList.add("hidden");
+            showAlert(`Welcome, ${user.email} (Admin authenticated)`, "success");
+            fetchCurrentCollection();
+          } else {
+            showAlert("Access Denied: Your account does not have Admin privileges.", "error");
+            signOut(auth);
+          }
+        } catch (e) {
+          showAlert("Admin verification failed: " + e.message, "error");
+          signOut(auth);
+        }
+      } else {
+        document.getElementById("authScreen").classList.remove("hidden");
+        loadedDocuments = [];
+        renderTable([]);
+      }
+    });
+
+    // Auth Actions
+    window.handleEmailLogin = async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("authEmail").value;
+      const pass = document.getElementById("authPassword").value;
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+      } catch (err) {
+        showAlert("Login failed: " + err.message, "error");
+      }
+    };
+
+    window.handleGoogleLogin = async () => {
+      try {
+        await signInWithPopup(auth, new GoogleAuthProvider());
+      } catch (err) {
+        showAlert("Google Sign-In failed: " + err.message, "error");
+      }
+    };
+
+    window.handleSignOut = () => signOut(auth);
+
+    // Collection Navigation
+    window.changeCollection = () => {
+      activeCollection = document.getElementById("collectionSelect").value;
+      document.getElementById("targetCollectionBadge").innerText = activeCollection;
+      fetchCurrentCollection();
+    };
+
+    // Read Collection Documents
+    window.fetchCurrentCollection = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, activeCollection));
+        loadedDocuments = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderTable(loadedDocuments);
+      } catch (err) {
+        showAlert(`Error loading collection '${activeCollection}': ${err.message}`, "error");
+      }
+    };
+
+    // Render Data Table
+    function renderTable(docs) {
+      const tbody = document.getElementById("tableBody");
+      if (docs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="p-8 text-center text-slate-500">No documents found in collection '${activeCollection}'.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = docs.map(d => {
+        const copy = { ...d };
+        delete copy.id;
+        const jsonPreview = JSON.stringify(copy).substring(0, 120) + "...";
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="p-4 font-mono font-bold text-indigo-400 text-xs">${d.id}</td>
+            <td class="p-4 font-mono text-xs text-slate-400">${jsonPreview}</td>
+            <td class="p-4 text-right space-x-2">
+              <button onclick="openEditModal('${d.id}')" class="bg-slate-800 hover:bg-slate-700 text-indigo-300 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 transition">Edit</button>
+              <button onclick="deleteDocument('${d.id}')" class="bg-rose-950/40 hover:bg-rose-900 text-rose-300 text-xs font-semibold px-3 py-1.5 rounded-lg border border-rose-900/50 transition">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    window.filterDocs = () => {
+      const q = document.getElementById("searchInput").value.toLowerCase();
+      const filtered = loadedDocuments.filter(d => 
+        d.id.toLowerCase().includes(q) || JSON.stringify(d).toLowerCase().includes(q)
+      );
+      renderTable(filtered);
+    };
+
+    // Delete Operation
+    window.deleteDocument = async (id) => {
+      if (!confirm(`Are you sure you want to delete document "${id}" from ${activeCollection}?`)) return;
+      try {
+        await deleteDoc(doc(db, activeCollection, id));
+        showAlert(`Deleted ${id}`, "success");
+        fetchCurrentCollection();
+      } catch (err) {
+        showAlert("Delete failed: " + err.message, "error");
+      }
+    };
+
+    // Create & Edit Modal Operations
+    window.openEditModal = (id) => {
+      const modal = document.getElementById("editModal");
+      const title = document.getElementById("editModalTitle");
+      const idInput = document.getElementById("docIdInput");
+      const jsonEditor = document.getElementById("jsonEditor");
+
+      modal.classList.remove("hidden");
+      if (id) {
+        title.innerText = `Edit Document: ${id}`;
+        idInput.value = id;
+        idInput.disabled = true;
+        const targetDoc = loadedDocuments.find(d => d.id === id);
+        const copy = { ...targetDoc };
+        delete copy.id;
+        jsonEditor.value = JSON.stringify(copy, null, 2);
+      } else {
+        title.innerText = `Create New Document in '${activeCollection}'`;
+        idInput.value = "";
+        idInput.disabled = false;
+        jsonEditor.value = '{\n  "title": "New Item"\n}';
+      }
+    };
+
+    window.closeEditModal = () => document.getElementById("editModal").classList.add("hidden");
+
+    window.saveSingleDocument = async () => {
+      const id = document.getElementById("docIdInput").value.trim() || `doc_${Date.now()}`;
+      const jsonStr = document.getElementById("jsonEditor").value;
+      const isMerge = document.getElementById("singleMergeToggle").checked;
+
+      try {
+        const parsedData = JSON.parse(jsonStr);
+        await setDoc(doc(db, activeCollection, id), parsedData, { merge: isMerge });
+        showAlert(`Successfully saved document '${id}'`, "success");
+        closeEditModal();
+        fetchCurrentCollection();
+      } catch (err) {
+        showAlert("Save failed: Invalid JSON format or missing permissions. " + err.message, "error");
+      }
+    };
+
+    // CSV & Excel Parsing via SheetJS
+    window.openUploadModal = () => document.getElementById("uploadModal").classList.remove("hidden");
+    window.closeUploadModal = () => document.getElementById("uploadModal").classList.add("hidden");
+
+    window.handleFileSelect = (evt) => {
+      const file = evt.target.files[0];
+      if (!file) return;
+
+      document.getElementById("fileLabel").innerText = `Selected: ${file.name}`;
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Convert sheet to JSON array
+          parsedFileData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+          document.getElementById("startUploadBtn").disabled = false;
+          showAlert(`Parsed ${parsedFileData.length} records from ${file.name}`, "success");
+        } catch (err) {
+          showAlert("Error parsing spreadsheet: " + err.message, "error");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    };
+
+    window.executeBatchUpload = async () => {
+      if (!parsedFileData || parsedFileData.length === 0) return;
+      const isMerge = document.getElementById("mergeModeToggle").checked;
+
+      try {
+        let batch = writeBatch(db);
+        let count = 0;
+
+        for (let i = 0; i < parsedFileData.length; i++) {
+          const row = parsedFileData[i];
+          
+          // Infer Document ID from common keys or auto-generate
+          const docId = row.id || row.questionId || row.examId || row.flashcardId || `doc_${Date.now()}_${i}`;
+          const dataMap = { ...row };
+          delete dataMap.id;
+
+          // Parse stringified lists or pipe-delimited values automatically
+          Object.keys(dataMap).forEach(key => {
+            if (typeof dataMap[key] === "string" && dataMap[key].includes("|")) {
+              dataMap[key] = dataMap[key].split("|").map(s => s.trim());
+            }
+          });
+
+          const docRef = doc(db, activeCollection, String(docId));
+          batch.set(docRef, dataMap, { merge: isMerge });
+          count++;
+
+          // Commit every 400 documents to respect Firestore batch limits
+          if (count % 400 === 0) {
+            await batch.commit();
+            batch = writeBatch(db);
+          }
+        }
+
+        await batch.commit();
+        showAlert(`Successfully uploaded ${count} items to '${activeCollection}'!`, "success");
+        closeUploadModal();
+        fetchCurrentCollection();
+      } catch (err) {
+        showAlert("Batch upload failed: " + err.message, "error");
+      }
+    };
+
+    function showAlert(msg, type) {
+      const banner = document.getElementById("alertBanner");
+      banner.innerText = msg;
+      banner.className = type === "error" 
+        ? "fixed top-4 right-4 z-50 p-4 rounded-xl text-sm font-medium shadow-2xl bg-rose-950/90 border border-rose-800 text-rose-200 block"
+        : "fixed top-4 right-4 z-50 p-4 rounded-xl text-sm font-medium shadow-2xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 block";
+      setTimeout(() => banner.classList.add("hidden"), 5000);
+    }
+  </script>
+</body>
+</html>
