@@ -1,4 +1,4 @@
-name: Deploy Web Portal to GitHub Pages
+name: Deploy Admin Portal to GitHub Pages
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Inject Firebase Config Secrets
@@ -26,13 +26,12 @@ jobs:
           SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
           APP_ID: ${{ secrets.FIREBASE_APP_ID }}
         run: |
-          sed -e "s|ENV_FIREBASE_API_KEY|$API_KEY|g" \
-              -e "s|ENV_FIREBASE_AUTH_DOMAIN|$AUTH_DOMAIN|g" \
-              -e "s|ENV_FIREBASE_PROJECT_ID|$PROJECT_ID|g" \
-              -e "s|ENV_FIREBASE_STORAGE_BUCKET|$STORAGE_BUCKET|g" \
-              -e "s|ENV_FIREBASE_MESSAGING_SENDER_ID|$SENDER_ID|g" \
-              -e "s|ENV_FIREBASE_APP_ID|$APP_ID|g" \
-              js/config.template.js > js/config.js
+          sed -i "s|YOUR_FIREBASE_API_KEY|$API_KEY|g" index.html
+          sed -i "s|YOUR_PROJECT.firebaseapp.com|$AUTH_DOMAIN|g" index.html
+          sed -i "s|YOUR_PROJECT_ID|$PROJECT_ID|g" index.html
+          sed -i "s|YOUR_PROJECT.appspot.com|$STORAGE_BUCKET|g" index.html
+          sed -i "s|YOUR_SENDER_ID|$SENDER_ID|g" index.html
+          sed -i "s|YOUR_APP_ID|$APP_ID|g" index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
